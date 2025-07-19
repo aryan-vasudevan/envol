@@ -53,6 +53,7 @@ struct HomePage: View {
     @State private var creditsMessage: String? = nil
     @State private var showCreditsMessage: Bool = false
     @State private var pendingImage: PendingPhoto? = nil
+    @State private var geminiTrashCount: Int = 0
     
     enum CleanupStep {
         case before
@@ -219,7 +220,7 @@ struct HomePage: View {
             .padding(.horizontal)
             // Action buttons and workflow
             actionButtons
-            // Show spinner if both images are present, else show latest cleanups
+            // Spinner/result/credits logic as before...
             if beforeImage != nil && afterImage != nil {
                 VStack(spacing: 16) {
                     if isProcessing {
@@ -280,7 +281,7 @@ struct HomePage: View {
                     .background(Color.blue)
                     .cornerRadius(12)
                 }
-                .disabled(!cameraManager.isCameraAvailable)
+                .disabled(isProcessing)
             } else if afterImage == nil {
                 Button(action: {
                     currentStep = .after
@@ -297,7 +298,7 @@ struct HomePage: View {
                     .background(Color.green)
                     .cornerRadius(12)
                 }
-                .disabled(!cameraManager.isCameraAvailable)
+                .disabled(isProcessing)
             }
             if beforeImage != nil || afterImage != nil {
                 Button(action: {
@@ -360,16 +361,19 @@ struct HomePage: View {
         validationHighlight = nil
         creditsMessage = nil
         showCreditsMessage = false
+        geminiTrashCount = 0
         Task {
             let result = await GeminiAPI.validateCleanup(before: before, after: after)
             await MainActor.run {
                 geminiValidationResult = result
                 isProcessing = false
-                // Feedback logic
                 let lower = result.lowercased()
-                if lower.contains("valid") && !(lower.contains("perspective") || lower.contains("angle") || lower.contains("view") || lower.contains("retake")) {
+                // Parse trash_count from Gemini response
+                let trashCount = parseTrashCount(from: result)
+                geminiTrashCount = trashCount
+                if lower.contains("valid") && !lower.contains("invalid") && !(lower.contains("perspective") || lower.contains("angle") || lower.contains("view") || lower.contains("retake")) {
                     validationHighlight = .green
-                    creditsMessage = "+10 credits added"
+                    creditsMessage = "+\(geminiTrashCount) credits added"
                     showCreditsMessage = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                         withAnimation {
@@ -393,7 +397,6 @@ struct HomePage: View {
                     validationHighlight = .yellow
                     creditsMessage = "Please take a more accurate after image"
                     showCreditsMessage = true
-                    // Do not reset everything, just clear afterImage and go back to after step
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         withAnimation {
                             showCreditsMessage = false
@@ -409,6 +412,18 @@ struct HomePage: View {
                 }
             }
         }
+    }
+
+    private func parseTrashCount(from response: String) -> Int {
+        // Look for 'trash_count: X' in the response
+        let pattern = "trash_count: \\d+"
+        if let range = response.range(of: pattern, options: .regularExpression) {
+            let match = String(response[range])
+            if let count = Int(match.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") {
+                return count
+            }
+        }
+        return 0
     }
 }
 
