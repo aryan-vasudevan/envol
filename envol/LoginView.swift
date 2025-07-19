@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LoginView: View {
-    @StateObject private var authManager = AuthManager()
+    @EnvironmentObject var authManager: AuthManager
     
     var body: some View {
         NavigationView {
@@ -35,7 +35,18 @@ struct LoginView: View {
                             .foregroundColor(.secondary)
                     } else {
                         Button(action: {
-                            authManager.login()
+                            // Add a longer delay to ensure window is fully active
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                // Double-check app is active before login
+                                if UIApplication.shared.applicationState == .active {
+                                    authManager.login()
+                                } else {
+                                    print("App not active, retrying...")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        authManager.login()
+                                    }
+                                }
+                            }
                         }) {
                             HStack {
                                 Image(systemName: "person.circle.fill")
@@ -53,6 +64,16 @@ struct LoginView: View {
                         Text("Sign in with Auth0 to get started")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        
+                        // Test button to verify URL scheme
+                        Button("Test URL Scheme") {
+                            if let url = URL(string: "dev.envol://test") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .padding(.top, 10)
                     }
                     
                     if let errorMessage = authManager.errorMessage {
@@ -94,7 +115,6 @@ struct LoginView: View {
             .padding()
             .navigationBarHidden(true)
         }
-        .environmentObject(authManager)
     }
 }
 

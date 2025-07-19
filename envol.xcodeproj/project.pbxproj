@@ -33,9 +33,22 @@
 		B89DE0762E2B75B900D84A33 /* envolUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = envolUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B857F5152E2BAF6F001F8B20 /* Exceptions for "envol" folder in "envol" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B89DE05E2E2B75B800D84A33 /* envol */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B89DE0612E2B75B800D84A33 /* envol */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B857F5152E2BAF6F001F8B20 /* Exceptions for "envol" folder in "envol" target */,
+			);
 			path = envol;
 			sourceTree = "<group>";
 		};
@@ -409,7 +422,8 @@
 				DEVELOPMENT_TEAM = BUKYCFMPL2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = dev.envol;
+				INFOPLIST_FILE = envol/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = Auth0;\n    CFBundleURLSchemes =     (\n        \"dev.envol\"\n    );\n}";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images of trash for community cleanup.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured images.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -440,7 +454,8 @@
 				DEVELOPMENT_TEAM = BUKYCFMPL2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleURLTypes = dev.envol;
+				INFOPLIST_FILE = envol/Info.plist;
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLName = Auth0;\n    CFBundleURLSchemes =     (\n        \"dev.envol\"\n    );\n}";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images of trash for community cleanup.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured images.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

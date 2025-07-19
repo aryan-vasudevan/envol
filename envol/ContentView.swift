@@ -10,7 +10,7 @@ import AVFoundation
 
 struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
-    @StateObject private var authManager = AuthManager()
+    @EnvironmentObject var authManager: AuthManager
     @State private var showingCamera = false
     @State private var beforeImage: UIImage?
     @State private var afterImage: UIImage?
@@ -30,7 +30,6 @@ struct ContentView: View {
                 LoginView()
             }
         }
-        .environmentObject(authManager)
     }
     
     private var mainAppView: some View {
