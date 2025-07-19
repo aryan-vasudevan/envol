@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B89DE12A2E2B8D1600D84A33 /* Auth0 in Frameworks */ = {isa = PBXBuildFile; productRef = B89DE0892E2B75B900D84A33 /* Auth0 */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		B89DE06D2E2B75B900D84A33 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B89DE12A2E2B8D1600D84A33 /* Auth0 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = envol;
 			packageProductDependencies = (
+				B89DE0892E2B75B900D84A33 /* Auth0 */,
 			);
 			productName = envol;
 			productReference = B89DE05F2E2B75B800D84A33 /* envol.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = B89DE0562E2B75B800D84A33;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B89DE08B2E2B75B900D84A33 /* XCRemoteSwiftPackageReference "Auth0" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B89DE0602E2B75B800D84A33 /* Products */;
 			projectDirPath = "";
@@ -400,6 +409,9 @@
 				DEVELOPMENT_TEAM = BUKYCFMPL2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = dev.envol;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images of trash for community cleanup.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured images.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -428,6 +440,9 @@
 				DEVELOPMENT_TEAM = BUKYCFMPL2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleURLTypes = dev.envol;
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to capture images of trash for community cleanup.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save captured images.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -558,6 +573,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B89DE08B2E2B75B900D84A33 /* XCRemoteSwiftPackageReference "Auth0" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/auth0/Auth0.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B89DE0892E2B75B900D84A33 /* Auth0 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B89DE08B2E2B75B900D84A33 /* XCRemoteSwiftPackageReference "Auth0" */;
+			productName = Auth0;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B89DE0572E2B75B800D84A33 /* Project object */;
 }

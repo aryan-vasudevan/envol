@@ -10,6 +10,7 @@ import AVFoundation
 
 struct ContentView: View {
     @StateObject private var cameraManager = CameraManager()
+    @StateObject private var authManager = AuthManager()
     @State private var showingCamera = false
     @State private var beforeImage: UIImage?
     @State private var afterImage: UIImage?
@@ -22,10 +23,43 @@ struct ContentView: View {
     }
     
     var body: some View {
+        Group {
+            if authManager.isAuthenticated {
+                mainAppView
+            } else {
+                LoginView()
+            }
+        }
+        .environmentObject(authManager)
+    }
+    
+    private var mainAppView: some View {
         NavigationView {
             VStack(spacing: 30) {
-                // Header
+                // Header with user info
                 VStack(spacing: 10) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Welcome,")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Text(authManager.displayName)
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            authManager.logout()
+                        }) {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.title2)
+                                .foregroundColor(.red)
+                        }
+                    }
+                    .padding(.horizontal)
+                    
                     Image(systemName: "leaf.fill")
                         .font(.system(size: 60))
                         .foregroundColor(.green)
