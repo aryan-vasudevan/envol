@@ -8,6 +8,11 @@
 import SwiftUI
 import AVFoundation
 
+struct PendingPhoto: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
 struct ContentView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var selectedTab = 0
@@ -43,6 +48,11 @@ struct HomePage: View {
     @State private var currentStep: CleanupStep = .before
     @State private var showingImageProcessor = false
     @State private var geminiValidationResult: String? = nil
+    @State private var isProcessing: Bool = false
+    @State private var validationHighlight: Color? = nil
+    @State private var creditsMessage: String? = nil
+    @State private var showCreditsMessage: Bool = false
+    @State private var pendingImage: PendingPhoto? = nil
     
     enum CleanupStep {
         case before
@@ -52,261 +62,353 @@ struct HomePage: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
-                // Combined welcome and credits in a translucent box (no exit button)
-                HStack {
-                    Text("Welcome, Aryan!")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Text("Credits: 0.0") // TODO: Replace with real credits from backend
-                        .font(.title3)
-                        .foregroundColor(.green)
-                }
-                .padding()
-                .background(Color(.systemGray6).opacity(0.8))
-                .cornerRadius(16)
-                .padding(.horizontal)
-                // Exit button outside the box
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        authManager.logout()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .font(.title2)
-                                .foregroundColor(.red)
-                            Text("Sign Out")
-                                .font(.body)
-                                .foregroundColor(.red)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                // Main content (no extra welcome, no logo/name in the middle)
-                VStack(spacing: 30) {
-                    // Progress indicator
-                    HStack(spacing: 20) {
-                        StepIndicator(
-                            step: 1,
-                            title: "Before",
-                            isCompleted: beforeImage != nil,
-                            isCurrent: currentStep == .before
-                        )
-                        StepIndicator(
-                            step: 2,
-                            title: "After",
-                            isCompleted: afterImage != nil,
-                            isCurrent: currentStep == .after
-                        )
-                    }
-                    .padding(.horizontal)
-                    // Image previews
-                    HStack(spacing: 20) {
-                        ImagePreviewCard(
-                            title: "Before",
-                            image: beforeImage,
-                            placeholder: "camera.fill"
-                        )
-                        ImagePreviewCard(
-                            title: "After",
-                            image: afterImage,
-                            placeholder: "camera.fill"
-                        )
-                    }
-                    .padding(.horizontal)
-                    // Action buttons
-                    VStack(spacing: 15) {
-                        if currentStep == .before {
-                            Button(action: {
-                                showingCamera = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "camera.fill")
-                                    Text("Take Before Photo")
-                                }
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .cornerRadius(12)
-                            }
-                            .disabled(!cameraManager.isCameraAvailable)
-                        } else {
-                            Button(action: {
-                                showingCamera = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "camera.fill")
-                                    Text("Take After Photo")
-                                }
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .cornerRadius(12)
-                            }
-                            .disabled(!cameraManager.isCameraAvailable)
-                        }
-                        // Validate Cleanup button
-                        if beforeImage != nil && afterImage != nil {
-                            Button(action: {
-                                // Placeholder: Gemini validation will be triggered here
-                                geminiValidationResult = "(Gemini validation result will appear here)"
-                            }) {
-                                HStack {
-                                    Image(systemName: "checkmark.seal.fill")
-                                    Text("Validate Cleanup")
-                                }
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.purple)
-                                .cornerRadius(12)
-                            }
-                        }
-                        if beforeImage != nil || afterImage != nil {
-                            Button(action: {
-                                resetWorkflow()
-                            }) {
-                                HStack {
-                                    Image(systemName: "arrow.clockwise")
-                                    Text("Reset")
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.red.opacity(0.1))
-                                .cornerRadius(12)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    // Gemini validation result placeholder
-                    if let result = geminiValidationResult {
-                        VStack {
-                            Text("Gemini Validation Result:")
-                                .font(.headline)
-                            Text(result)
-                                .font(.body)
-                                .foregroundColor(.primary)
-                                .padding(.top, 2)
-                        }
-                        .padding()
-                        .background(Color(.systemGray5).opacity(0.7))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                    }
-                    // New: Latest cleanups box
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Latest Cleanups")
-                            .font(.headline)
-                            .padding(.bottom, 2)
-                        // Placeholder for future Firebase-powered list
-                        ForEach(0..<3) { i in
-                            HStack {
-                                Image(systemName: "person.crop.circle")
-                                    .foregroundColor(.green)
-                                Text("User \(i+1) cleaned up trash!")
-                                    .font(.subheadline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Text("Just now")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6).opacity(0.8))
-                    .cornerRadius(16)
-                    .padding(.horizontal)
-                    Spacer()
-                }
+                welcomeCreditsBox
+                exitButtonRow
+                mainContent
+                Spacer()
             }
             .padding()
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Text("envol")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                        Image(systemName: "leaf.fill")
-                            .foregroundColor(.green)
-                        Text("Home")
-                            .font(.headline)
-                    }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text("envol")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                    Image(systemName: "leaf.fill")
+                        .foregroundColor(.green)
+                    Text("Home")
+                        .font(.headline)
                 }
             }
-            .sheet(isPresented: $showingCamera) {
-                if cameraManager.isCameraAvailable {
-                    CameraView(
-                        cameraManager: cameraManager,
-                        onImageCaptured: { image in
-                            if currentStep == .before {
-                                beforeImage = image
-                                currentStep = .after
-                            } else {
-                                afterImage = image
-                            }
-                            showingCamera = false
-                        }
-                    )
-                } else {
-                    VStack {
-                        Text("Camera Not Available")
-                            .font(.title2)
-                            .padding()
-                        Text("Please run this app on a physical device with camera access.")
+        }
+        .sheet(isPresented: $showingCamera) {
+            if cameraManager.isCameraAvailable {
+                CameraView { image in
+                    if currentStep == .before {
+                        beforeImage = image
+                        currentStep = .after
+                    } else if currentStep == .after {
+                        afterImage = image
+                    }
+                    showingCamera = false
+                }
+            } else {
+                VStack {
+                    Text("Camera Not Available")
+                        .font(.title2)
+                        .padding()
+                    Text("Please run this app on a physical device with camera access.")
+                        .multilineTextAlignment(.center)
+                        .padding()
+                    Button("Close") {
+                        showingCamera = false
+                    }
+                    .padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showingImageProcessor) {
+            if let before = beforeImage, let after = afterImage {
+                ImageProcessorView(
+                    beforeImage: before,
+                    afterImage: after
+                )
+            } else {
+                VStack {
+                    Text("Images Not Available")
+                        .font(.title2)
+                        .padding()
+                    Button("Close") {
+                        showingImageProcessor = false
+                    }
+                    .padding()
+                }
+            }
+        }
+        .onAppear {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
+                cameraManager.checkCameraPermission()
+            }
+            #else
+            cameraManager.checkCameraPermission()
+            #endif
+        }
+    }
+
+    private var welcomeCreditsBox: some View {
+        HStack {
+            Text("Welcome, Aryan!")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            Spacer()
+            Text("Credits: 0.0")
+                .font(.title3)
+                .foregroundColor(.green)
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+        .padding(.horizontal)
+    }
+
+    private var exitButtonRow: some View {
+        HStack {
+            Spacer()
+            Button(action: {
+                authManager.logout()
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.title2)
+                        .foregroundColor(.red)
+                    Text("Sign Out")
+                        .font(.body)
+                        .foregroundColor(.red)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var mainContent: some View {
+        VStack(spacing: 30) {
+            // Progress indicator
+            HStack(spacing: 20) {
+                StepIndicator(
+                    step: 1,
+                    title: "Before",
+                    isCompleted: beforeImage != nil,
+                    isCurrent: currentStep == .before
+                )
+                .foregroundColor(validationHighlight ?? .green)
+                StepIndicator(
+                    step: 2,
+                    title: "After",
+                    isCompleted: afterImage != nil,
+                    isCurrent: currentStep == .after
+                )
+                .foregroundColor(validationHighlight ?? .green)
+            }
+            .padding(.horizontal)
+            // Image previews
+            HStack(spacing: 20) {
+                ImagePreviewCard(
+                    title: "Before",
+                    image: beforeImage,
+                    placeholder: "camera.fill"
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(validationHighlight ?? .clear, lineWidth: 4)
+                )
+                ImagePreviewCard(
+                    title: "After",
+                    image: afterImage,
+                    placeholder: "camera.fill"
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(validationHighlight ?? .clear, lineWidth: 4)
+                )
+            }
+            .padding(.horizontal)
+            // Action buttons and workflow
+            actionButtons
+            // Show spinner if both images are present, else show latest cleanups
+            if beforeImage != nil && afterImage != nil {
+                VStack(spacing: 16) {
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(.systemGray)))
+                            .scaleEffect(2.0)
+                        Text("Processing cleanup...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else if let result = geminiValidationResult {
+                        Text(result)
+                            .font(.headline)
+                            .foregroundColor(validationHighlight ?? .primary)
                             .multilineTextAlignment(.center)
                             .padding()
-                        Button("Close") {
-                            showingCamera = false
-                        }
-                        .padding()
+                            .background((validationHighlight ?? .clear).opacity(0.1))
+                            .cornerRadius(12)
+                            .transition(.opacity)
                     }
                 }
-            }
-            .sheet(isPresented: $showingImageProcessor) {
-                if let before = beforeImage, let after = afterImage {
-                    ImageProcessorView(
-                        beforeImage: before,
-                        afterImage: after
-                    )
-                } else {
-                    VStack {
-                        Text("Images Not Available")
-                            .font(.title2)
-                            .padding()
-                        Button("Close") {
-                            showingImageProcessor = false
-                        }
-                        .padding()
+                .padding()
+                .onAppear {
+                    if !isProcessing && geminiValidationResult == nil {
+                        validateCleanupWithGemini()
                     }
                 }
+            } else {
+                latestCleanupsBox
             }
-            .onAppear {
-                #if DEBUG
-                if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
-                    cameraManager.checkCameraPermission()
-                }
-                #else
-                cameraManager.checkCameraPermission()
-                #endif
+            if let creditsMessage = creditsMessage, showCreditsMessage {
+                Text(creditsMessage)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(validationHighlight ?? .primary)
+                    .padding()
+                    .background((validationHighlight ?? .clear).opacity(0.2))
+                    .cornerRadius(16)
+                    .transition(.opacity)
             }
         }
     }
+
+    private var actionButtons: some View {
+        VStack(spacing: 15) {
+            if beforeImage == nil {
+                Button(action: {
+                    currentStep = .before
+                    showingCamera = true
+                }) {
+                    HStack {
+                        Image(systemName: "camera.fill")
+                        Text("Take Before Photo")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(12)
+                }
+                .disabled(!cameraManager.isCameraAvailable)
+            } else if afterImage == nil {
+                Button(action: {
+                    currentStep = .after
+                    showingCamera = true
+                }) {
+                    HStack {
+                        Image(systemName: "camera.fill")
+                        Text("Take After Photo")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.green)
+                    .cornerRadius(12)
+                }
+                .disabled(!cameraManager.isCameraAvailable)
+            }
+            if beforeImage != nil || afterImage != nil {
+                Button(action: {
+                    resetWorkflow()
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Reset")
+                    }
+                    .font(.subheadline)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    private var latestCleanupsBox: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Latest Cleanups")
+                .font(.headline)
+                .padding(.bottom, 2)
+            // Placeholder for future Firebase-powered list
+            ForEach(0..<3) { i in
+                HStack {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundColor(.green)
+                    Text("User \(i+1) cleaned up trash!")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Text("Just now")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+        .padding(.horizontal)
+    }
+
     private func resetWorkflow() {
         beforeImage = nil
         afterImage = nil
         currentStep = .before
+        geminiValidationResult = nil
+        isProcessing = false
+    }
+
+    private func validateCleanupWithGemini() {
+        guard let before = beforeImage, let after = afterImage else { return }
+        isProcessing = true
+        geminiValidationResult = nil
+        validationHighlight = nil
+        creditsMessage = nil
+        showCreditsMessage = false
+        Task {
+            let result = await GeminiAPI.validateCleanup(before: before, after: after)
+            await MainActor.run {
+                geminiValidationResult = result
+                isProcessing = false
+                // Feedback logic
+                let lower = result.lowercased()
+                if lower.contains("valid") && !(lower.contains("perspective") || lower.contains("angle") || lower.contains("view") || lower.contains("retake")) {
+                    validationHighlight = .green
+                    creditsMessage = "+10 credits added"
+                    showCreditsMessage = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation {
+                            showCreditsMessage = false
+                            resetWorkflow()
+                            validationHighlight = nil
+                        }
+                    }
+                } else if lower.contains("invalid") {
+                    validationHighlight = .red
+                    creditsMessage = "No credits added"
+                    showCreditsMessage = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        withAnimation {
+                            showCreditsMessage = false
+                            resetWorkflow()
+                            validationHighlight = nil
+                        }
+                    }
+                } else if lower.contains("perspective") || lower.contains("angle") || lower.contains("view") || lower.contains("retake") {
+                    validationHighlight = .yellow
+                    creditsMessage = "Please take a more accurate after image"
+                    showCreditsMessage = true
+                    // Do not reset everything, just clear afterImage and go back to after step
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        withAnimation {
+                            showCreditsMessage = false
+                            validationHighlight = nil
+                            afterImage = nil
+                            currentStep = .after
+                        }
+                    }
+                } else {
+                    validationHighlight = .primary
+                    creditsMessage = nil
+                    showCreditsMessage = false
+                }
+            }
+        }
     }
 }
 
