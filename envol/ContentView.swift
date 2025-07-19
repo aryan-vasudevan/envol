@@ -8,7 +8,6 @@
 import SwiftUI
 import AVFoundation
 import CoreMotion
-import Prism
 import SceneKit
 
 struct PendingPhoto: Identifiable {
@@ -37,12 +36,32 @@ struct ContentView: View {
                                     Label("Home", systemImage: "house.fill")
                                 }
                                 .tag(0)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .leading).combined(with: .opacity),
+                                    removal: .move(edge: .trailing).combined(with: .opacity)
+                                ))
+                            
+                            MetricsPage()
+                                .tabItem {
+                                    Label("Metrics", systemImage: "chart.bar.fill")
+                                }
+                                .tag(1)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
+                            
                             GamePage(isPlaying: $isPlaying)
                                 .tabItem {
                                     Label("Game", systemImage: "gamecontroller.fill")
                                 }
-                                .tag(1)
+                                .tag(2)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
                         }
+                        .animation(.easeInOut(duration: 0.3), value: selectedTab)
                     }
                 } else {
                     LoginView()
@@ -69,6 +88,13 @@ struct HomePage: View {
     @State private var pendingImage: PendingPhoto? = nil
     @State private var geminiTrashCount: Int = 0
     
+    // Animation states
+    @State private var animateHeader = false
+    @State private var animateWelcomeBox = false
+    @State private var animateStepIndicators = false
+    @State private var animateImageCards = false
+    @State private var animateButtons = false
+    
     enum CleanupStep {
         case before
         case after
@@ -77,8 +103,19 @@ struct HomePage: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
+                envolHeader(title: "Home")
+                    .opacity(animateHeader ? 1 : 0)
+                    .offset(y: animateHeader ? 0 : -20)
+                
                 welcomeCreditsBox
+                    .opacity(animateWelcomeBox ? 1 : 0)
+                    .offset(y: animateWelcomeBox ? 0 : 20)
+                    .scaleEffect(animateWelcomeBox ? 1 : 0.9)
+                
                 exitButtonRow
+                    .opacity(animateWelcomeBox ? 1 : 0)
+                    .offset(y: animateWelcomeBox ? 0 : 10)
+                
                 mainContent
                 Spacer()
             }
@@ -88,18 +125,7 @@ struct HomePage: View {
         .background(Color.clear)
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text("envol")
-                        .font(.system(size: 18, weight: .bold, design: .default))
-                    Image(systemName: "leaf.fill")
-                        .foregroundColor(.green)
-                    Text("Home")
-                        .font(.system(size: 18, weight: .semibold, design: .default))
-                }
-            }
-        }
+        .toolbar { EmptyView() }
         .sheet(isPresented: $showingCamera) {
             if cameraManager.isCameraAvailable {
                 CameraView { image in
@@ -148,6 +174,34 @@ struct HomePage: View {
             }
         }
         .onAppear {
+            // Reset animation states
+            animateHeader = false
+            animateWelcomeBox = false
+            animateStepIndicators = false
+            animateImageCards = false
+            animateButtons = false
+            
+            // Trigger animations with delays
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateHeader = true
+            }
+            
+            withAnimation(.easeOut(duration: 0.8).delay(0.2)) {
+                animateWelcomeBox = true
+            }
+            
+            withAnimation(.easeOut(duration: 0.8).delay(0.4)) {
+                animateStepIndicators = true
+            }
+            
+            withAnimation(.easeOut(duration: 0.8).delay(0.6)) {
+                animateImageCards = true
+            }
+            
+            withAnimation(.easeOut(duration: 0.8).delay(0.8)) {
+                animateButtons = true
+            }
+            
             #if DEBUG
             if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
                 cameraManager.checkCameraPermission()
@@ -160,7 +214,7 @@ struct HomePage: View {
 
     private var welcomeCreditsBox: some View {
         HStack {
-            Text("Welcome, Aryan!")
+            Text("Welcome, \(authManager.displayName.isEmpty ? "User" : authManager.displayName)!")
                 .font(.system(size: 20, weight: .bold, design: .default))
                 .foregroundColor(.primary)
             Spacer()
@@ -178,16 +232,18 @@ struct HomePage: View {
         HStack {
             Spacer()
             Button(action: {
+                // Clear CreditsManager user before logout
+                creditsManager.setUser(email: "")
                 authManager.logout()
             }) {
-                                    HStack(spacing: 4) {
-                        Image(systemName: "rectangle.portrait.and.arrow.right")
-                            .font(.system(size: 18, weight: .medium, design: .default))
-                            .foregroundColor(.red)
-                        Text("Sign Out")
-                            .font(.system(size: 16, weight: .medium, design: .default))
-                            .foregroundColor(.red)
-                    }
+                HStack(spacing: 4) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 18, weight: .medium, design: .default))
+                        .foregroundColor(.red)
+                    Text("Sign Out")
+                        .font(.system(size: 16, weight: .medium, design: .default))
+                        .foregroundColor(.red)
+                }
             }
         }
         .padding(.horizontal)
@@ -204,6 +260,10 @@ struct HomePage: View {
                     isCurrent: currentStep == .before
                 )
                 .foregroundColor(validationHighlight ?? .green)
+                .opacity(animateStepIndicators ? 1 : 0)
+                .offset(y: animateStepIndicators ? 0 : 30)
+                .animation(.easeOut(duration: 0.6).delay(0.4), value: animateStepIndicators)
+                
                 StepIndicator(
                     step: 2,
                     title: "After",
@@ -211,8 +271,12 @@ struct HomePage: View {
                     isCurrent: currentStep == .after
                 )
                 .foregroundColor(validationHighlight ?? .green)
+                .opacity(animateStepIndicators ? 1 : 0)
+                .offset(y: animateStepIndicators ? 0 : 30)
+                .animation(.easeOut(duration: 0.6).delay(0.5), value: animateStepIndicators)
             }
             .padding(.horizontal)
+            
             // Image previews
             HStack(spacing: 20) {
                 ImagePreviewCard(
@@ -224,6 +288,10 @@ struct HomePage: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(validationHighlight ?? .clear, lineWidth: 4)
                 )
+                .opacity(animateImageCards ? 1 : 0)
+                .offset(x: animateImageCards ? 0 : -50)
+                .animation(.easeOut(duration: 0.8).delay(0.6), value: animateImageCards)
+                
                 ImagePreviewCard(
                     title: "After",
                     image: afterImage,
@@ -233,10 +301,18 @@ struct HomePage: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(validationHighlight ?? .clear, lineWidth: 4)
                 )
+                .opacity(animateImageCards ? 1 : 0)
+                .offset(x: animateImageCards ? 0 : 50)
+                .animation(.easeOut(duration: 0.8).delay(0.7), value: animateImageCards)
             }
             .padding(.horizontal)
+            
             // Action buttons and workflow
             actionButtons
+                .opacity(animateButtons ? 1 : 0)
+                .offset(y: animateButtons ? 0 : 30)
+                .animation(.easeOut(duration: 0.8).delay(0.8), value: animateButtons)
+            
             // Spinner/result/credits logic as before...
             if beforeImage != nil && afterImage != nil {
                 VStack(spacing: 16) {
@@ -266,7 +342,11 @@ struct HomePage: View {
                 }
             } else {
                 latestCleanupsBox
+                    .opacity(animateButtons ? 1 : 0)
+                    .offset(y: animateButtons ? 0 : 30)
+                    .animation(.easeOut(duration: 0.8).delay(1.0), value: animateButtons)
             }
+            
             if let creditsMessage = creditsMessage, showCreditsMessage {
                 Text(creditsMessage)
                     .font(.title2)
@@ -467,6 +547,344 @@ struct CleanupPage: View {
     }
 }
 
+struct MetricsPage: View {
+    @State private var animateCharts = false
+    @State private var animateDonut = false
+    
+    // Animation states for page entry
+    @State private var animateHeader = false
+    @State private var animateStats = false
+    @State private var animateWeeklyChart = false
+    @State private var animateBreakdown = false
+    @State private var animateActivity = false
+    
+    // Sample data
+    private let weeklyData = [
+        ("Mon", 12), ("Tue", 8), ("Wed", 15), ("Thu", 22), 
+        ("Fri", 18), ("Sat", 25), ("Sun", 14)
+    ]
+    
+    private let trashTypeData = [
+        ("Plastic", 35, Color.blue),
+        ("Paper", 28, Color.green),
+        ("Metal", 20, Color.orange),
+        ("Glass", 12, Color.purple),
+        ("Other", 5, Color.red)
+    ]
+    
+    private let totalCollections = 118
+    private let weeklyGoal = 100
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    envolHeader(title: "Metrics")
+                        .opacity(animateHeader ? 1 : 0)
+                        .offset(y: animateHeader ? 0 : -20)
+                    
+                    // Header stats
+                    headerStats
+                        .opacity(animateStats ? 1 : 0)
+                        .offset(y: animateStats ? 0 : 20)
+                        .scaleEffect(animateStats ? 1 : 0.9)
+                    
+                    // Weekly progress chart
+                    weeklyProgressChart
+                        .opacity(animateWeeklyChart ? 1 : 0)
+                        .offset(y: animateWeeklyChart ? 0 : 30)
+                    
+                    // Trash type breakdown
+                    trashTypeBreakdown
+                        .opacity(animateBreakdown ? 1 : 0)
+                        .offset(y: animateBreakdown ? 0 : 30)
+                    
+                    // Recent activity
+                    recentActivity
+                        .opacity(animateActivity ? 1 : 0)
+                        .offset(y: animateActivity ? 0 : 30)
+                }
+                .padding()
+            }
+            .background(Color.clear)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { EmptyView() }
+            .onAppear {
+                // Reset animation states
+                animateHeader = false
+                animateStats = false
+                animateWeeklyChart = false
+                animateBreakdown = false
+                animateActivity = false
+                animateCharts = false
+                animateDonut = false
+                
+                // Trigger page entry animations with delays
+                withAnimation(.easeOut(duration: 0.6)) {
+                    animateHeader = true
+                }
+                
+                withAnimation(.easeOut(duration: 0.8).delay(0.2)) {
+                    animateStats = true
+                }
+                
+                withAnimation(.easeOut(duration: 0.8).delay(0.4)) {
+                    animateWeeklyChart = true
+                }
+                
+                withAnimation(.easeOut(duration: 0.8).delay(0.6)) {
+                    animateBreakdown = true
+                }
+                
+                withAnimation(.easeOut(duration: 0.8).delay(0.8)) {
+                    animateActivity = true
+                }
+                
+                // Trigger chart animations with additional delays
+                withAnimation(.easeOut(duration: 1.0).delay(1.0)) {
+                    animateCharts = true
+                }
+                withAnimation(.easeOut(duration: 1.5).delay(1.3)) {
+                    animateDonut = true
+                }
+            }
+        }
+    }
+    
+    private var headerStats: some View {
+        VStack(spacing: 16) {
+            // Total collections card
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Total Collections")
+                        .font(.system(size: 14, weight: .medium, design: .default))
+                        .foregroundColor(.secondary)
+                    Text("\(totalCollections)")
+                        .font(.system(size: 32, weight: .bold, design: .default))
+                        .foregroundColor(.primary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text("This Week")
+                        .font(.system(size: 14, weight: .medium, design: .default))
+                        .foregroundColor(.secondary)
+                    Text("\(weeklyData.map { $0.1 }.reduce(0, +))")
+                        .font(.system(size: 24, weight: .semibold, design: .default))
+                        .foregroundColor(.green)
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6).opacity(0.8))
+            .cornerRadius(16)
+            
+            // Weekly goal progress
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly Goal")
+                        .font(.system(size: 14, weight: .medium, design: .default))
+                        .foregroundColor(.secondary)
+                    Text("\(weeklyData.map { $0.1 }.reduce(0, +))/\(weeklyGoal)")
+                        .font(.system(size: 18, weight: .semibold, design: .default))
+                        .foregroundColor(.primary)
+                }
+                Spacer()
+                CircularProgressView(
+                    progress: Double(weeklyData.map { $0.1 }.reduce(0, +)) / Double(weeklyGoal),
+                    animate: animateDonut
+                )
+                .frame(width: 40, height: 40)
+            }
+            .padding()
+            .background(Color(.systemGray6).opacity(0.8))
+            .cornerRadius(16)
+        }
+    }
+    
+    private var weeklyProgressChart: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Daily Collections")
+                .font(.system(size: 18, weight: .semibold, design: .default))
+                .foregroundColor(.primary)
+            
+            HStack(alignment: .bottom, spacing: 12) {
+                ForEach(Array(weeklyData.enumerated()), id: \.offset) { index, data in
+                    VStack(spacing: 8) {
+                        // Animated bar
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(Color.green.gradient)
+                            .frame(height: animateCharts ? CGFloat(data.1) * 3 : 0)
+                            .animation(.easeOut(duration: 0.8).delay(Double(index) * 0.1), value: animateCharts)
+                        
+                        Text(data.0)
+                            .font(.system(size: 12, weight: .medium, design: .default))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 120)
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+    }
+    
+    private var trashTypeBreakdown: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Trash Type Breakdown")
+                .font(.system(size: 18, weight: .semibold, design: .default))
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 20) {
+                // Donut chart
+                DonutChartView(data: trashTypeData, animate: animateDonut)
+                    .frame(width: 120, height: 120)
+                
+                // Legend
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(trashTypeData.enumerated()), id: \.offset) { index, data in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(data.2)
+                                .frame(width: 12, height: 12)
+                            Text(data.0)
+                                .font(.system(size: 14, weight: .medium, design: .default))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("\(data.1)%")
+                                .font(.system(size: 14, weight: .semibold, design: .default))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+    }
+    
+    private var recentActivity: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Recent Activity")
+                .font(.system(size: 18, weight: .semibold, design: .default))
+                .foregroundColor(.primary)
+            
+            VStack(spacing: 12) {
+                ForEach(0..<5, id: \.self) { index in
+                    HStack {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 8, height: 8)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Collected \(["plastic bottles", "paper waste", "metal cans", "glass items", "mixed trash"][index])")
+                                .font(.system(size: 14, weight: .medium, design: .default))
+                                .foregroundColor(.primary)
+                            Text("\(["2 hours ago", "4 hours ago", "6 hours ago", "Yesterday", "2 days ago"][index])")
+                                .font(.system(size: 12, weight: .medium, design: .default))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Text("+\([3, 2, 4, 1, 2][index]) 🍃")
+                            .font(.system(size: 14, weight: .semibold, design: .default))
+                            .foregroundColor(.green)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+    }
+}
+
+struct CircularProgressView: View {
+    let progress: Double
+    let animate: Bool
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.gray.opacity(0.3), lineWidth: 4)
+            
+            Circle()
+                .trim(from: 0, to: animate ? progress : 0)
+                .stroke(Color.green, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.easeOut(duration: 1.0), value: animate)
+        }
+    }
+}
+
+struct DonutChartView: View {
+    let data: [(String, Int, Color)]
+    let animate: Bool
+    
+    var body: some View {
+        ZStack {
+            ForEach(Array(data.enumerated()), id: \.offset) { index, item in
+                DonutSlice(
+                    percentage: Double(item.1) / 100.0,
+                    color: item.2,
+                    startAngle: startAngle(for: index),
+                    animate: animate
+                )
+            }
+            
+            // Center circle
+            Circle()
+                .fill(Color(.systemGray6).opacity(0.8))
+                .frame(width: 60, height: 60)
+            
+            VStack {
+                Text("Total")
+                    .font(.system(size: 10, weight: .medium, design: .default))
+                    .foregroundColor(.secondary)
+                Text("\(data.map { $0.1 }.reduce(0, +))%")
+                    .font(.system(size: 16, weight: .bold, design: .default))
+                    .foregroundColor(.primary)
+            }
+        }
+    }
+    
+    private func startAngle(for index: Int) -> Double {
+        let previousPercentages = data.prefix(index).map { Double($0.1) / 100.0 }
+        return previousPercentages.reduce(0, +) * 360
+    }
+}
+
+struct DonutSlice: View {
+    let percentage: Double
+    let color: Color
+    let startAngle: Double
+    let animate: Bool
+    
+    var body: some View {
+        Path { path in
+            let center = CGPoint(x: 60, y: 60)
+            let radius: CGFloat = 50
+            let endAngle = startAngle + (animate ? percentage * 360 : 0)
+            
+            path.move(to: center)
+            path.addArc(
+                center: center,
+                radius: radius,
+                startAngle: .degrees(startAngle),
+                endAngle: .degrees(endAngle),
+                clockwise: false
+            )
+            path.closeSubpath()
+        }
+        .fill(color)
+        .animation(.easeOut(duration: 1.0).delay(0.3), value: animate)
+    }
+}
+
 class MotionManager: ObservableObject {
     private var motionManager = CMMotionManager()
     @Published var roll: Double = 0.0
@@ -486,6 +904,13 @@ struct GamePage: View {
     @Binding var isPlaying: Bool
     @State private var selectedPowerUp: PowerUp = .none
     @State private var showingInsufficientCredits = false
+    
+    // Animation states
+    @State private var animateHeader = false
+    @State private var animateTitle = false
+    @State private var animateCredits = false
+    @State private var animatePowerUps = false
+    @State private var animateStartButton = false
 
     var body: some View {
         NavigationView {
@@ -495,6 +920,10 @@ struct GamePage: View {
                         SlopeGameSceneView(coordinator: gameCoordinator)
                             .edgesIgnoringSafeArea(.all)
                         VStack {
+                            envolHeader(title: "Eco Run")
+                                .opacity(animateHeader ? 1 : 0)
+                                .offset(y: animateHeader ? 0 : -20)
+                            
                             HStack {
                                 Text("Score: \(gameCoordinator.score)")
                                     .font(.system(size: 18, weight: .semibold, design: .default))
@@ -536,27 +965,45 @@ struct GamePage: View {
                 } else {
                     // Start menu
                     VStack(spacing: 32) {
-                        Text("Eco Slope")
-                            .font(.system(size: 32, weight: .bold, design: .default))
-                            .foregroundColor(.cyan)
-                            .shadow(color: .cyan, radius: 10)
+                        envolHeader(title: "Eco Run")
+                            .opacity(animateHeader ? 1 : 0)
+                            .offset(y: animateHeader ? 0 : -20)
                         
-                        Text("\(creditsManager.credits) 🍃")
-                            .font(.system(size: 20, weight: .semibold, design: .default))
-                            .foregroundColor(.green)
-                        
-                        // Cost display
-                        VStack(spacing: 8) {
-                            Text("Game Cost: \(selectedPowerUp.cost) 🍃")
-                                .font(.system(size: 18, weight: .medium, design: .default))
-                                .foregroundColor(creditsManager.credits >= selectedPowerUp.cost ? .green : .red)
+                        // Credits and cost box
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Credits Available")
+                                    .font(.system(size: 14, weight: .medium, design: .default))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("Game Cost")
+                                    .font(.system(size: 14, weight: .medium, design: .default))
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            HStack {
+                                Text("\(creditsManager.credits) 🍃")
+                                    .font(.system(size: 24, weight: .semibold, design: .default))
+                                    .foregroundColor(.green)
+                                Spacer()
+                                Text("\(selectedPowerUp.cost) 🍃")
+                                    .font(.system(size: 20, weight: .semibold, design: .default))
+                                    .foregroundColor(creditsManager.credits >= selectedPowerUp.cost ? .green : .red)
+                            }
                             
                             if creditsManager.credits < selectedPowerUp.cost {
-                                Text("Insufficient 🍃!")
-                                    .font(.system(size: 14, weight: .medium, design: .default))
+                                Text("Insufficient credits!")
+                                    .font(.system(size: 12, weight: .medium, design: .default))
                                     .foregroundColor(.red)
+                                    .frame(maxWidth: .infinity, alignment: .center)
                             }
                         }
+                        .padding()
+                        .background(Color(.systemGray6).opacity(0.8))
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        .opacity(animateCredits ? 1 : 0)
+                        .offset(y: animateCredits ? 0 : 20)
                         
                         // Power-up selection
                         VStack(spacing: 16) {
@@ -601,6 +1048,8 @@ struct GamePage: View {
                                 }
                             }
                         }
+                        .opacity(animatePowerUps ? 1 : 0)
+                        .offset(y: animatePowerUps ? 0 : 30)
                         
                         VStack(spacing: 16) {
                             Button(action: startGame) {
@@ -619,6 +1068,8 @@ struct GamePage: View {
                             .disabled(creditsManager.credits < selectedPowerUp.cost)
                             .padding(.horizontal)
                         }
+                        .opacity(animateStartButton ? 1 : 0)
+                        .offset(y: animateStartButton ? 0 : 30)
                         
                         Spacer()
                     }
@@ -626,6 +1077,35 @@ struct GamePage: View {
                     .background(Color.clear)
                     .navigationTitle("")
                     .navigationBarTitleDisplayMode(.inline)
+                    .onAppear {
+                        // Reset animation states
+                        animateHeader = false
+                        animateTitle = false
+                        animateCredits = false
+                        animatePowerUps = false
+                        animateStartButton = false
+                        
+                        // Trigger animations with delays
+                        withAnimation(.easeOut(duration: 0.6)) {
+                            animateHeader = true
+                        }
+                        
+                        withAnimation(.easeOut(duration: 0.8).delay(0.2)) {
+                            animateTitle = true
+                        }
+                        
+                        withAnimation(.easeOut(duration: 0.8).delay(0.4)) {
+                            animateCredits = true
+                        }
+                        
+                        withAnimation(.easeOut(duration: 0.8).delay(0.6)) {
+                            animatePowerUps = true
+                        }
+                        
+                        withAnimation(.easeOut(duration: 0.8).delay(0.8)) {
+                            animateStartButton = true
+                        }
+                    }
                 }
             }
         }
@@ -860,6 +1340,19 @@ struct StarryBackground: View {
             }
         }
     }
+}
+
+@ViewBuilder
+private func envolHeader(title: String) -> some View {
+    HStack(spacing: 6) {
+        Text("envol")
+            .font(.system(size: 18, weight: .bold, design: .default))
+        Image(systemName: "leaf.fill")
+            .foregroundColor(.green)
+        Text(title)
+            .font(.system(size: 18, weight: .semibold, design: .default))
+    }
+    .padding(.bottom, 4)
 }
 
 #Preview {

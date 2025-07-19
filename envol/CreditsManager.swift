@@ -1,56 +1,49 @@
 import Foundation
-import FirebaseDatabase
 
 class CreditsManager: ObservableObject {
     @Published var credits: Int = 0
-    private var ref: DatabaseReference!
+    private var currentUserKey: String = ""
 
     init() {
-        ref = Database.database().reference()
-        print("CreditsManager initialized. Database ref: \(String(describing: ref))")
-        observeCredits()
+        print("CreditsManager initialized (local mode)")
     }
-
-    func observeCredits() {
-        print("Setting up observer at /users/aryan/credits")
-        ref.child("users/aryan/credits").observe(.value) { snapshot in
-            print("Received snapshot: \(snapshot)")
-            print("Snapshot value: \(String(describing: snapshot.value))")
-            if let value = snapshot.value as? Int {
-                print("Parsed credits as Int: \(value)")
-                DispatchQueue.main.async {
-                    self.credits = value
-                }
-            } else if let valueStr = snapshot.value as? String, let value = Int(valueStr) {
-                print("Parsed credits as String->Int: \(value)")
-                DispatchQueue.main.async {
-                    self.credits = value
-                }
-            } else {
-                print("Could not parse credits value from snapshot.")
-            }
-        }
+    
+    func setUser(email: String) {
+        // Create a safe key from email (replace special characters)
+        let userKey = email.replacingOccurrences(of: ".", with: "_")
+            .replacingOccurrences(of: "@", with: "_")
+            .replacingOccurrences(of: "#", with: "_")
+            .replacingOccurrences(of: "$", with: "_")
+            .replacingOccurrences(of: "[", with: "_")
+            .replacingOccurrences(of: "]", with: "_")
+        currentUserKey = userKey
+        // Load credits from UserDefaults
+        credits = UserDefaults.standard.integer(forKey: "credits_\(currentUserKey)")
     }
-
+    
     func addCredits(_ amount: Int) {
-        let creditsRef = ref.child("users/aryan/credits")
-        creditsRef.runTransactionBlock { currentData in
-            var value = currentData.value as? Int ?? 0
-            value += amount
-            print("addCredits: current value \(currentData.value ?? "nil"), adding \(amount), new value \(value)")
-            currentData.value = value
-            return TransactionResult.success(withValue: currentData)
+        guard !currentUserKey.isEmpty else {
+            print("CreditsManager: No user key set, cannot add credits")
+            return
         }
+        let currentCredits = UserDefaults.standard.integer(forKey: "credits_\(currentUserKey)")
+        let newCredits = currentCredits + amount
+        UserDefaults.standard.set(newCredits, forKey: "credits_\(currentUserKey)")
+        credits = newCredits
     }
     
     func subtractCredits(_ amount: Int) {
-        let creditsRef = ref.child("users/aryan/credits")
-        creditsRef.runTransactionBlock { currentData in
-            var value = currentData.value as? Int ?? 0
-            value = max(0, value - amount) // Ensure credits don't go below 0
-            print("subtractCredits: current value \(currentData.value ?? "nil"), subtracting \(amount), new value \(value)")
-            currentData.value = value
-            return TransactionResult.success(withValue: currentData)
+        guard !currentUserKey.isEmpty else {
+            print("CreditsManager: No user key set, cannot subtract credits")
+            return
         }
+        let currentCredits = UserDefaults.standard.integer(forKey: "credits_\(currentUserKey)")
+        let newCredits = max(0, currentCredits - amount)
+        UserDefaults.standard.set(newCredits, forKey: "credits_\(currentUserKey)")
+        credits = newCredits
+    }
+    
+    deinit {
+        // No cleanup needed for local storage
     }
 }
