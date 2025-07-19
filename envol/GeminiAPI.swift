@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import FirebaseCore
 
 enum GeminiAPI {
     static func validateCleanup(before: UIImage, after: UIImage) async -> String {
@@ -47,4 +48,4 @@ enum GeminiAPI {
             return "Gemini API error: \(error.localizedDescription)"
         }
     }
-} 
+}
