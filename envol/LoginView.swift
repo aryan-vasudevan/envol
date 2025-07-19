@@ -12,9 +12,13 @@ struct LoginView: View {
                         .font(.system(size: 80))
                         .foregroundColor(.green)
                     
-                    Text("Clean Community")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
+                    HStack(spacing: 6) {
+                        Text("envol")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                        Image(systemName: "leaf.fill")
+                            .foregroundColor(.green)
+                    }
                     
                     Text("Join the movement to keep our community clean")
                         .font(.subheadline)

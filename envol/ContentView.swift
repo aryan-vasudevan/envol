@@ -9,13 +9,40 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
-    @StateObject private var cameraManager = CameraManager()
     @EnvironmentObject var authManager: AuthManager
+    @State private var selectedTab = 0
+    
+    var body: some View {
+        Group {
+            if authManager.isAuthenticated {
+                TabView(selection: $selectedTab) {
+                    HomePage()
+                        .tabItem {
+                            Label("Home", systemImage: "house.fill")
+                        }
+                        .tag(0)
+                    GamePage()
+                        .tabItem {
+                            Label("Game", systemImage: "gamecontroller.fill")
+                        }
+                        .tag(1)
+                }
+            } else {
+                LoginView()
+            }
+        }
+    }
+}
+
+struct HomePage: View {
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var cameraManager = CameraManager()
     @State private var showingCamera = false
     @State private var beforeImage: UIImage?
     @State private var afterImage: UIImage?
     @State private var currentStep: CleanupStep = .before
     @State private var showingImageProcessor = false
+    @State private var geminiValidationResult: String? = nil
     
     enum CleanupStep {
         case before
@@ -23,230 +50,317 @@ struct ContentView: View {
     }
     
     var body: some View {
-        Group {
-            if authManager.isAuthenticated {
-                mainAppView
-            } else {
-                LoginView()
-            }
-        }
-    }
-    
-    private var mainAppView: some View {
         NavigationView {
-            VStack(spacing: 30) {
-                // Header with user info
-                VStack(spacing: 10) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Welcome,")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            Text(authManager.displayName)
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                        }
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            authManager.logout()
-                        }) {
+            VStack(spacing: 16) {
+                // Combined welcome and credits in a translucent box (no exit button)
+                HStack {
+                    Text("Welcome, Aryan!")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Text("Credits: 0.0") // TODO: Replace with real credits from backend
+                        .font(.title3)
+                        .foregroundColor(.green)
+                }
+                .padding()
+                .background(Color(.systemGray6).opacity(0.8))
+                .cornerRadius(16)
+                .padding(.horizontal)
+                // Exit button outside the box
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        authManager.logout()
+                    }) {
+                        HStack(spacing: 4) {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .font(.title2)
                                 .foregroundColor(.red)
+                            Text("Sign Out")
+                                .font(.body)
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                // Main content (no extra welcome, no logo/name in the middle)
+                VStack(spacing: 30) {
+                    // Progress indicator
+                    HStack(spacing: 20) {
+                        StepIndicator(
+                            step: 1,
+                            title: "Before",
+                            isCompleted: beforeImage != nil,
+                            isCurrent: currentStep == .before
+                        )
+                        StepIndicator(
+                            step: 2,
+                            title: "After",
+                            isCompleted: afterImage != nil,
+                            isCurrent: currentStep == .after
+                        )
+                    }
+                    .padding(.horizontal)
+                    // Image previews
+                    HStack(spacing: 20) {
+                        ImagePreviewCard(
+                            title: "Before",
+                            image: beforeImage,
+                            placeholder: "camera.fill"
+                        )
+                        ImagePreviewCard(
+                            title: "After",
+                            image: afterImage,
+                            placeholder: "camera.fill"
+                        )
+                    }
+                    .padding(.horizontal)
+                    // Action buttons
+                    VStack(spacing: 15) {
+                        if currentStep == .before {
+                            Button(action: {
+                                showingCamera = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "camera.fill")
+                                    Text("Take Before Photo")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .cornerRadius(12)
+                            }
+                            .disabled(!cameraManager.isCameraAvailable)
+                        } else {
+                            Button(action: {
+                                showingCamera = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "camera.fill")
+                                    Text("Take After Photo")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
+                                .cornerRadius(12)
+                            }
+                            .disabled(!cameraManager.isCameraAvailable)
+                        }
+                        // Validate Cleanup button
+                        if beforeImage != nil && afterImage != nil {
+                            Button(action: {
+                                // Placeholder: Gemini validation will be triggered here
+                                geminiValidationResult = "(Gemini validation result will appear here)"
+                            }) {
+                                HStack {
+                                    Image(systemName: "checkmark.seal.fill")
+                                    Text("Validate Cleanup")
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.purple)
+                                .cornerRadius(12)
+                            }
+                        }
+                        if beforeImage != nil || afterImage != nil {
+                            Button(action: {
+                                resetWorkflow()
+                            }) {
+                                HStack {
+                                    Image(systemName: "arrow.clockwise")
+                                    Text("Reset")
+                                }
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.red.opacity(0.1))
+                                .cornerRadius(12)
+                            }
                         }
                     }
                     .padding(.horizontal)
-                    
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.green)
-                    
-                    Text("Clean Community")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
-                    Text("Help keep our community clean with AI-powered trash detection")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
+                    // Gemini validation result placeholder
+                    if let result = geminiValidationResult {
+                        VStack {
+                            Text("Gemini Validation Result:")
+                                .font(.headline)
+                            Text(result)
+                                .font(.body)
+                                .foregroundColor(.primary)
+                                .padding(.top, 2)
+                        }
+                        .padding()
+                        .background(Color(.systemGray5).opacity(0.7))
+                        .cornerRadius(12)
                         .padding(.horizontal)
-                }
-                
-                // Progress indicator
-                HStack(spacing: 20) {
-                    StepIndicator(
-                        step: 1,
-                        title: "Before",
-                        isCompleted: beforeImage != nil,
-                        isCurrent: currentStep == .before
-                    )
-                    
-                    StepIndicator(
-                        step: 2,
-                        title: "After",
-                        isCompleted: afterImage != nil,
-                        isCurrent: currentStep == .after
-                    )
-                }
-                .padding(.horizontal)
-                
-                // Image previews
-                HStack(spacing: 20) {
-                    ImagePreviewCard(
-                        title: "Before",
-                        image: beforeImage,
-                        placeholder: "camera.fill"
-                    )
-                    
-                    ImagePreviewCard(
-                        title: "After",
-                        image: afterImage,
-                        placeholder: "camera.fill"
-                    )
-                }
-                .padding(.horizontal)
-                
-                // Action buttons
-                VStack(spacing: 15) {
-                    if currentStep == .before {
-                        Button(action: {
-                            showingCamera = true
-                        }) {
-                            HStack {
-                                Image(systemName: "camera.fill")
-                                Text("Take Before Photo")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .cornerRadius(12)
-                        }
-                        .disabled(!cameraManager.isCameraAvailable)
-                    } else {
-                        Button(action: {
-                            showingCamera = true
-                        }) {
-                            HStack {
-                                Image(systemName: "camera.fill")
-                                Text("Take After Photo")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.green)
-                            .cornerRadius(12)
-                        }
-                        .disabled(!cameraManager.isCameraAvailable)
                     }
-                    
-                    if beforeImage != nil && afterImage != nil {
-                        Button(action: {
-                            showingImageProcessor = true
-                        }) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                Text("Process Cleanup")
-                            }
+                    // New: Latest cleanups box
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Latest Cleanups")
                             .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.orange)
-                            .cornerRadius(12)
+                            .padding(.bottom, 2)
+                        // Placeholder for future Firebase-powered list
+                        ForEach(0..<3) { i in
+                            HStack {
+                                Image(systemName: "person.crop.circle")
+                                    .foregroundColor(.green)
+                                Text("User \(i+1) cleaned up trash!")
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text("Just now")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                     }
-                    
-                    if beforeImage != nil || afterImage != nil {
-                        Button(action: {
-                            resetWorkflow()
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.clockwise")
-                                Text("Reset")
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.red.opacity(0.1))
-                            .cornerRadius(12)
-                        }
-                    }
+                    .padding()
+                    .background(Color(.systemGray6).opacity(0.8))
+                    .cornerRadius(16)
+                    .padding(.horizontal)
+                    Spacer()
                 }
-                .padding(.horizontal)
-                
-                Spacer()
             }
             .padding()
-            .navigationBarHidden(true)
-        }
-        .sheet(isPresented: $showingCamera) {
-            if cameraManager.isCameraAvailable {
-                CameraView(
-                    cameraManager: cameraManager,
-                    onImageCaptured: { image in
-                        if currentStep == .before {
-                            beforeImage = image
-                            currentStep = .after
-                        } else {
-                            afterImage = image
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text("envol")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        Image(systemName: "leaf.fill")
+                            .foregroundColor(.green)
+                        Text("Home")
+                            .font(.headline)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingCamera) {
+                if cameraManager.isCameraAvailable {
+                    CameraView(
+                        cameraManager: cameraManager,
+                        onImageCaptured: { image in
+                            if currentStep == .before {
+                                beforeImage = image
+                                currentStep = .after
+                            } else {
+                                afterImage = image
+                            }
+                            showingCamera = false
                         }
-                        showingCamera = false
-                    }
-                )
-            } else {
-                VStack {
-                    Text("Camera Not Available")
-                        .font(.title2)
+                    )
+                } else {
+                    VStack {
+                        Text("Camera Not Available")
+                            .font(.title2)
+                            .padding()
+                        Text("Please run this app on a physical device with camera access.")
+                            .multilineTextAlignment(.center)
+                            .padding()
+                        Button("Close") {
+                            showingCamera = false
+                        }
                         .padding()
-                    Text("Please run this app on a physical device with camera access.")
-                        .multilineTextAlignment(.center)
-                        .padding()
-                    Button("Close") {
-                        showingCamera = false
                     }
-                    .padding()
                 }
             }
-        }
-        .sheet(isPresented: $showingImageProcessor) {
-            if let before = beforeImage, let after = afterImage {
-                ImageProcessorView(
-                    beforeImage: before,
-                    afterImage: after
-                )
-            } else {
-                VStack {
-                    Text("Images Not Available")
-                        .font(.title2)
+            .sheet(isPresented: $showingImageProcessor) {
+                if let before = beforeImage, let after = afterImage {
+                    ImageProcessorView(
+                        beforeImage: before,
+                        afterImage: after
+                    )
+                } else {
+                    VStack {
+                        Text("Images Not Available")
+                            .font(.title2)
+                            .padding()
+                        Button("Close") {
+                            showingImageProcessor = false
+                        }
                         .padding()
-                    Button("Close") {
-                        showingImageProcessor = false
                     }
-                    .padding()
                 }
             }
-        }
-        .onAppear {
-            #if DEBUG
-            if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
+            .onAppear {
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
+                    cameraManager.checkCameraPermission()
+                }
+                #else
                 cameraManager.checkCameraPermission()
+                #endif
             }
-            #else
-            cameraManager.checkCameraPermission()
-            #endif
         }
     }
-    
     private func resetWorkflow() {
         beforeImage = nil
         afterImage = nil
         currentStep = .before
+    }
+}
+
+struct CleanupPage: View {
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Upload Before & After Photos")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Text("Take or select your before and after photos to earn credits!")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                // TODO: Add photo upload UI and logic
+                Spacer()
+                Text("(Future) Trash metrics and Roboflow results will appear here.")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            .padding()
+            .navigationTitle("Cleanup")
+        }
+    }
+}
+
+struct GamePage: View {
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Game Coming Soon!")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Text("Use your credits as currency in the upcoming game.")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text("envol")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        Image(systemName: "leaf.fill")
+                            .foregroundColor(.green)
+                        Text("Game")
+                            .font(.headline)
+                    }
+                }
+            }
+        }
     }
 }
 
