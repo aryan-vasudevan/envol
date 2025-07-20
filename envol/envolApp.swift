@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Auth0
+import FirebaseCore
 
 @main
 struct envolApp: App {
@@ -14,7 +15,7 @@ struct envolApp: App {
     @StateObject private var creditsManager = CreditsManager()
 
     init() {
-        // FirebaseApp.configure() // Temporarily disabled
+        FirebaseApp.configure()
     }
 
     var body: some Scene {

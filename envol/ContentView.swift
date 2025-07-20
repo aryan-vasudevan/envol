@@ -9,10 +9,19 @@ import SwiftUI
 import AVFoundation
 import CoreMotion
 import SceneKit
+import UIKit
 
 struct PendingPhoto: Identifiable {
     let id = UUID()
     let image: UIImage
+}
+
+struct CleanupEntry: Identifiable {
+    let id = UUID()
+    let name: String
+    let item: String
+    let color: Color
+    let timestamp: Date
 }
 
 struct ContentView: View {
@@ -60,8 +69,36 @@ struct ContentView: View {
                                     insertion: .move(edge: .trailing).combined(with: .opacity),
                                     removal: .move(edge: .leading).combined(with: .opacity)
                                 ))
+                            
+                            // Sign out tab
+                            SignOutTabView(selectedTab: $selectedTab)
+                                .tabItem {
+                                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                                }
+                                .tag(3)
                         }
                         .animation(.easeInOut(duration: 0.3), value: selectedTab)
+                        .accentColor(.blue) // This will make the selected tab blue
+                        .onAppear {
+                            // Customize tab bar appearance
+                            let appearance = UITabBarAppearance()
+                            appearance.configureWithOpaqueBackground()
+                            appearance.backgroundColor = UIColor.systemBackground
+                            
+                            // Set the default selected item color to blue
+                            appearance.stackedLayoutAppearance.selected.iconColor = UIColor.systemBlue
+                            appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor.systemBlue]
+                            
+                            // Set the default unselected item color to gray
+                            appearance.stackedLayoutAppearance.normal.iconColor = UIColor.systemGray
+                            appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.systemGray]
+                            
+                            UITabBar.appearance().standardAppearance = appearance
+                            UITabBar.appearance().scrollEdgeAppearance = appearance
+                            
+                            // Start continuous monitoring to keep sign out tab red
+                            startTabBarColorMonitoring()
+                        }
                     }
                 } else {
                     LoginView()
@@ -88,6 +125,10 @@ struct HomePage: View {
     @State private var pendingImage: PendingPhoto? = nil
     @State private var geminiTrashCount: Int = 0
     
+    // Latest cleanups data
+    @State private var latestCleanups: [CleanupEntry] = []
+    @State private var cleanupTimer: Timer?
+    
     // Animation states
     @State private var animateHeader = false
     @State private var animateWelcomeBox = false
@@ -99,6 +140,22 @@ struct HomePage: View {
         case before
         case after
     }
+    
+    // Random data for cleanups
+    private let randomNames = [
+        "Lara", "Alex", "Jordan", "Sam", "Taylor", "Casey", "Riley", "Quinn",
+        "Morgan", "Avery", "Blake", "Cameron", "Drew", "Emery", "Finley", "Gray"
+    ]
+    
+    private let randomItems = [
+        "some wrappers", "plastic bottles", "paper waste", "metal cans", "glass items",
+        "food containers", "coffee cups", "takeout boxes", "soda cans", "water bottles",
+        "snack bags", "candy wrappers", "straws", "utensils", "napkins", "receipts"
+    ]
+    
+    private let randomColors: [Color] = [
+        .green, .blue, .orange, .purple, .pink, .red, .yellow, .cyan, .mint, .indigo
+    ]
     
     var body: some View {
         NavigationView {
@@ -112,13 +169,11 @@ struct HomePage: View {
                     .offset(y: animateWelcomeBox ? 0 : 20)
                     .scaleEffect(animateWelcomeBox ? 1 : 0.9)
                 
-                exitButtonRow
-                    .opacity(animateWelcomeBox ? 1 : 0)
-                    .offset(y: animateWelcomeBox ? 0 : 10)
-                
                 mainContent
                 Spacer()
             }
+            
+
             .padding()
             .background(Color.clear)
         }
@@ -202,6 +257,12 @@ struct HomePage: View {
                 animateButtons = true
             }
             
+            // Setup user credits when page appears
+            setupUserCredits()
+            
+            // Start the cleanup timer
+            startCleanupTimer()
+            
             #if DEBUG
             if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] != "1" {
                 cameraManager.checkCameraPermission()
@@ -209,6 +270,13 @@ struct HomePage: View {
             #else
             cameraManager.checkCameraPermission()
             #endif
+        }
+        .onDisappear {
+            // Stop the cleanup timer when leaving the page
+            stopCleanupTimer()
+        }
+        .onChange(of: authManager.isAuthenticated) { _ in
+            setupUserCredits()
         }
     }
 
@@ -228,90 +296,152 @@ struct HomePage: View {
         .padding(.horizontal)
     }
 
-    private var exitButtonRow: some View {
-        HStack {
-            Spacer()
-            Button(action: {
-                // Clear CreditsManager user before logout
-                creditsManager.setUser(email: "")
-                authManager.logout()
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 18, weight: .medium, design: .default))
-                        .foregroundColor(.red)
-                    Text("Sign Out")
-                        .font(.system(size: 16, weight: .medium, design: .default))
-                        .foregroundColor(.red)
-                }
+
+    
+    // Monitor authentication state and set up user in CreditsManager
+    private func setupUserCredits() {
+        if authManager.isAuthenticated && !authManager.email.isEmpty {
+            creditsManager.setUser(email: authManager.email)
+        }
+    }
+    
+    // Helper function to format time ago
+    private func timeAgoString(from date: Date) -> String {
+        let timeInterval = Date().timeIntervalSince(date)
+        if timeInterval < 60 {
+            return "Just now"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes)m ago"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            return "\(hours)h ago"
+        } else {
+            let days = Int(timeInterval / 86400)
+            return "\(days)d ago"
+        }
+    }
+    
+    // Add a new random cleanup entry
+    private func addRandomCleanup() {
+        let randomName = randomNames.randomElement() ?? "User"
+        let randomItem = randomItems.randomElement() ?? "trash"
+        let randomColor = randomColors.randomElement() ?? .green
+        
+        let newEntry = CleanupEntry(
+            name: randomName,
+            item: randomItem,
+            color: randomColor,
+            timestamp: Date()
+        )
+        
+        withAnimation(.easeInOut(duration: 0.5)) {
+            latestCleanups.insert(newEntry, at: 0)
+            // Keep only the latest 5 entries
+            if latestCleanups.count > 5 {
+                latestCleanups = Array(latestCleanups.prefix(5))
             }
         }
-        .padding(.horizontal)
+    }
+    
+    // Start the cleanup timer
+    private func startCleanupTimer() {
+        cleanupTimer?.invalidate()
+        cleanupTimer = Timer.scheduledTimer(withTimeInterval: Double.random(in: 1...3), repeats: false) { _ in
+            addRandomCleanup()
+            // Schedule next update
+            startCleanupTimer()
+        }
+    }
+    
+    // Stop the cleanup timer
+    private func stopCleanupTimer() {
+        cleanupTimer?.invalidate()
+        cleanupTimer = nil
     }
 
     private var mainContent: some View {
-        VStack(spacing: 30) {
-            // Progress indicator
-            HStack(spacing: 20) {
-                StepIndicator(
-                    step: 1,
-                    title: "Before",
-                    isCompleted: beforeImage != nil,
-                    isCurrent: currentStep == .before
-                )
-                .foregroundColor(validationHighlight ?? .green)
-                .opacity(animateStepIndicators ? 1 : 0)
-                .offset(y: animateStepIndicators ? 0 : 30)
-                .animation(.easeOut(duration: 0.6).delay(0.4), value: animateStepIndicators)
+        VStack(spacing: 24) {
+            // Combined progress and photo capture box
+            VStack(spacing: 20) {
+                Text("Cleanup Workflow")
+                    .font(.system(size: 18, weight: .semibold, design: .default))
+                    .foregroundColor(.primary)
                 
-                StepIndicator(
-                    step: 2,
-                    title: "After",
-                    isCompleted: afterImage != nil,
-                    isCurrent: currentStep == .after
-                )
-                .foregroundColor(validationHighlight ?? .green)
-                .opacity(animateStepIndicators ? 1 : 0)
-                .offset(y: animateStepIndicators ? 0 : 30)
-                .animation(.easeOut(duration: 0.6).delay(0.5), value: animateStepIndicators)
+                // Progress indicators
+                HStack(spacing: 20) {
+                    StepIndicator(
+                        step: 1,
+                        title: "Before",
+                        isCompleted: beforeImage != nil,
+                        isCurrent: currentStep == .before
+                    )
+                    .foregroundColor(validationHighlight ?? .green)
+                    .opacity(animateStepIndicators ? 1 : 0)
+                    .offset(y: animateStepIndicators ? 0 : 30)
+                    .animation(.easeOut(duration: 0.6).delay(0.4), value: animateStepIndicators)
+                    
+                    StepIndicator(
+                        step: 2,
+                        title: "After",
+                        isCompleted: afterImage != nil,
+                        isCurrent: currentStep == .after
+                    )
+                    .foregroundColor(validationHighlight ?? .green)
+                    .opacity(animateStepIndicators ? 1 : 0)
+                    .offset(y: animateStepIndicators ? 0 : 30)
+                    .animation(.easeOut(duration: 0.6).delay(0.5), value: animateStepIndicators)
+                }
+                
+                // Image previews
+                HStack(spacing: 20) {
+                    ImagePreviewCard(
+                        title: "Before",
+                        image: beforeImage,
+                        placeholder: "camera.fill"
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(validationHighlight ?? .clear, lineWidth: 4)
+                    )
+                    .opacity(animateImageCards ? 1 : 0)
+                    .offset(x: animateImageCards ? 0 : -50)
+                    .animation(.easeOut(duration: 0.8).delay(0.6), value: animateImageCards)
+                    
+                    ImagePreviewCard(
+                        title: "After",
+                        image: afterImage,
+                        placeholder: "camera.fill"
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(validationHighlight ?? .clear, lineWidth: 4)
+                    )
+                    .opacity(animateImageCards ? 1 : 0)
+                    .offset(x: animateImageCards ? 0 : 50)
+                    .animation(.easeOut(duration: 0.8).delay(0.7), value: animateImageCards)
+                }
             }
+            .padding()
+            .background(Color(.systemGray6).opacity(0.8))
+            .cornerRadius(16)
             .padding(.horizontal)
             
-            // Image previews
-            HStack(spacing: 20) {
-                ImagePreviewCard(
-                    title: "Before",
-                    image: beforeImage,
-                    placeholder: "camera.fill"
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(validationHighlight ?? .clear, lineWidth: 4)
-                )
-                .opacity(animateImageCards ? 1 : 0)
-                .offset(x: animateImageCards ? 0 : -50)
-                .animation(.easeOut(duration: 0.8).delay(0.6), value: animateImageCards)
+            // Action buttons box
+            VStack(spacing: 16) {
+                Text("Actions")
+                    .font(.system(size: 18, weight: .semibold, design: .default))
+                    .foregroundColor(.primary)
                 
-                ImagePreviewCard(
-                    title: "After",
-                    image: afterImage,
-                    placeholder: "camera.fill"
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(validationHighlight ?? .clear, lineWidth: 4)
-                )
-                .opacity(animateImageCards ? 1 : 0)
-                .offset(x: animateImageCards ? 0 : 50)
-                .animation(.easeOut(duration: 0.8).delay(0.7), value: animateImageCards)
+                actionButtons
+                    .opacity(animateButtons ? 1 : 0)
+                    .offset(y: animateButtons ? 0 : 30)
+                    .animation(.easeOut(duration: 0.8).delay(0.8), value: animateButtons)
             }
+            .padding()
+            .background(Color(.systemGray6).opacity(0.8))
+            .cornerRadius(16)
             .padding(.horizontal)
-            
-            // Action buttons and workflow
-            actionButtons
-                .opacity(animateButtons ? 1 : 0)
-                .offset(y: animateButtons ? 0 : 30)
-                .animation(.easeOut(duration: 0.8).delay(0.8), value: animateButtons)
             
             // Spinner/result/credits logic as before...
             if beforeImage != nil && afterImage != nil {
@@ -345,6 +475,9 @@ struct HomePage: View {
                     .opacity(animateButtons ? 1 : 0)
                     .offset(y: animateButtons ? 0 : 30)
                     .animation(.easeOut(duration: 0.8).delay(1.0), value: animateButtons)
+                
+                // Add bottom spacing to prevent overlap with tab bar
+                Spacer(minLength: 20)
             }
             
             if let creditsMessage = creditsMessage, showCreditsMessage {
@@ -422,18 +555,37 @@ struct HomePage: View {
             Text("Latest Cleanups")
                 .font(.headline)
                 .padding(.bottom, 2)
-            // Placeholder for future Firebase-powered list
-            ForEach(0..<3) { i in
-                HStack {
-                    Image(systemName: "person.crop.circle")
-                        .foregroundColor(.green)
-                    Text("User \(i+1) cleaned up trash!")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    Spacer()
-                    Text("Just now")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+            
+            if latestCleanups.isEmpty {
+                // Show placeholder entries while loading
+                ForEach(0..<3) { i in
+                    HStack {
+                        Image(systemName: "person.crop.circle")
+                            .foregroundColor(.green)
+                        Text("User \(i+1) cleaned up trash!")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text("Just now")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                // Show dynamic entries
+                ForEach(latestCleanups.prefix(3)) { entry in
+                    HStack {
+                        Image(systemName: "person.crop.circle")
+                            .foregroundColor(entry.color)
+                        Text("\(entry.name) cleaned up \(entry.item)!")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text(timeAgoString(from: entry.timestamp))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
@@ -575,6 +727,20 @@ struct MetricsPage: View {
     private let totalCollections = 118
     private let weeklyGoal = 100
     
+    // Leaderboard data
+    private let leaderboardData = [
+        ("Lara Chen", 142, false),
+        ("Aryan Vasudevan", 118, true),  // Your name highlighted
+        ("Alex Rodriguez", 95, false),
+        ("Jordan Smith", 87, false),
+        ("Sam Johnson", 76, false),
+        ("Taylor Kim", 65, false),
+        ("Casey Wong", 54, false),
+        ("Riley Patel", 43, false)
+    ]
+    
+    @State private var showAllFriends = false
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -583,26 +749,25 @@ struct MetricsPage: View {
                         .opacity(animateHeader ? 1 : 0)
                         .offset(y: animateHeader ? 0 : -20)
                     
+                    // Leaderboard
+                    leaderboard
+                        .frame(maxWidth: .infinity)
+                    
                     // Header stats
                     headerStats
-                        .opacity(animateStats ? 1 : 0)
-                        .offset(y: animateStats ? 0 : 20)
-                        .scaleEffect(animateStats ? 1 : 0.9)
+                        .frame(maxWidth: .infinity)
                     
                     // Weekly progress chart
                     weeklyProgressChart
-                        .opacity(animateWeeklyChart ? 1 : 0)
-                        .offset(y: animateWeeklyChart ? 0 : 30)
+                        .frame(maxWidth: .infinity)
                     
                     // Trash type breakdown
                     trashTypeBreakdown
-                        .opacity(animateBreakdown ? 1 : 0)
-                        .offset(y: animateBreakdown ? 0 : 30)
+                        .frame(maxWidth: .infinity)
                     
-                    // Recent activity
+                    // Recent activity (shortened)
                     recentActivity
-                        .opacity(animateActivity ? 1 : 0)
-                        .offset(y: animateActivity ? 0 : 30)
+                        .frame(maxWidth: .infinity)
                 }
                 .padding()
             }
@@ -677,6 +842,7 @@ struct MetricsPage: View {
             .padding()
             .background(Color(.systemGray6).opacity(0.8))
             .cornerRadius(16)
+            .padding(.horizontal)
             
             // Weekly goal progress
             HStack {
@@ -698,6 +864,7 @@ struct MetricsPage: View {
             .padding()
             .background(Color(.systemGray6).opacity(0.8))
             .cornerRadius(16)
+            .padding(.horizontal)
         }
     }
     
@@ -707,13 +874,13 @@ struct MetricsPage: View {
                 .font(.system(size: 18, weight: .semibold, design: .default))
                 .foregroundColor(.primary)
             
-            HStack(alignment: .bottom, spacing: 12) {
+            HStack(alignment: .bottom, spacing: 4) {
                 ForEach(Array(weeklyData.enumerated()), id: \.offset) { index, data in
                     VStack(spacing: 8) {
                         // Animated bar
                         RoundedRectangle(cornerRadius: 4)
                             .fill(Color.green.gradient)
-                            .frame(height: animateCharts ? CGFloat(data.1) * 3 : 0)
+                            .frame(width: 20, height: animateCharts ? CGFloat(data.1) * 2 : 5)
                             .animation(.easeOut(duration: 0.8).delay(Double(index) * 0.1), value: animateCharts)
                         
                         Text(data.0)
@@ -728,6 +895,7 @@ struct MetricsPage: View {
         .padding()
         .background(Color(.systemGray6).opacity(0.8))
         .cornerRadius(16)
+        .padding(.horizontal)
     }
     
     private var trashTypeBreakdown: some View {
@@ -763,6 +931,72 @@ struct MetricsPage: View {
         .padding()
         .background(Color(.systemGray6).opacity(0.8))
         .cornerRadius(16)
+        .padding(.horizontal)
+    }
+    
+    private var leaderboard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Friends Leaderboard")
+                    .font(.system(size: 18, weight: .semibold, design: .default))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showAllFriends.toggle()
+                    }
+                }) {
+                    Text(showAllFriends ? "Show Top 3" : "Show All")
+                        .font(.system(size: 14, weight: .medium, design: .default))
+                        .foregroundColor(.blue)
+                }
+            }
+            
+            VStack(spacing: 12) {
+                ForEach(Array((showAllFriends ? leaderboardData : Array(leaderboardData.prefix(3))).enumerated()), id: \.offset) { index, data in
+                    HStack(spacing: 12) {
+                        // Rank
+                        Text("\(index + 1)")
+                            .font(.system(size: 16, weight: .bold, design: .default))
+                            .foregroundColor(data.2 ? .white : .secondary)
+                            .frame(width: 24, alignment: .center)
+                        
+                        Spacer()
+                        
+                        // Score bar with name inside
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(data.2 ? Color.blue.gradient : Color.green.gradient)
+                                .frame(width: animateCharts ? CGFloat(data.1) * 1.5 : 5, height: 32)
+                                .animation(.easeOut(duration: 0.8).delay(Double(index) * 0.1), value: animateCharts)
+                            
+                            // Name inside the bar
+                            Text(data.0)
+                                .font(.system(size: 12, weight: .semibold, design: .default))
+                                .foregroundColor(.white)
+                                .padding(.leading, 12)
+                                .lineLimit(1)
+                        }
+                        
+                        // Score number
+                        Text("\(data.1)")
+                            .font(.system(size: 14, weight: .semibold, design: .default))
+                            .foregroundColor(data.2 ? .blue : .secondary)
+                            .frame(width: 30, alignment: .trailing)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(data.2 ? Color.blue.opacity(0.3) : Color.clear)
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+        .padding(.horizontal)
     }
     
     private var recentActivity: some View {
@@ -772,24 +1006,24 @@ struct MetricsPage: View {
                 .foregroundColor(.primary)
             
             VStack(spacing: 12) {
-                ForEach(0..<5, id: \.self) { index in
+                ForEach(0..<3, id: \.self) { index in
                     HStack {
                         Circle()
                             .fill(Color.green)
                             .frame(width: 8, height: 8)
                         
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Collected \(["plastic bottles", "paper waste", "metal cans", "glass items", "mixed trash"][index])")
+                            Text("Collected \(["plastic bottles", "paper waste", "metal cans"][index])")
                                 .font(.system(size: 14, weight: .medium, design: .default))
                                 .foregroundColor(.primary)
-                            Text("\(["2 hours ago", "4 hours ago", "6 hours ago", "Yesterday", "2 days ago"][index])")
+                            Text("\(["2 hours ago", "4 hours ago", "6 hours ago"][index])")
                                 .font(.system(size: 12, weight: .medium, design: .default))
                                 .foregroundColor(.secondary)
                         }
                         
                         Spacer()
                         
-                        Text("+\([3, 2, 4, 1, 2][index]) 🍃")
+                        Text("+\([3, 2, 4][index]) 🍃")
                             .font(.system(size: 14, weight: .semibold, design: .default))
                             .foregroundColor(.green)
                     }
@@ -800,6 +1034,7 @@ struct MetricsPage: View {
         .padding()
         .background(Color(.systemGray6).opacity(0.8))
         .cornerRadius(16)
+        .padding(.horizontal)
     }
 }
 
@@ -813,7 +1048,7 @@ struct CircularProgressView: View {
                 .stroke(Color.gray.opacity(0.3), lineWidth: 4)
             
             Circle()
-                .trim(from: 0, to: animate ? progress : 0)
+                .trim(from: 0, to: animate ? progress : 0.1)
                 .stroke(Color.green, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.easeOut(duration: 1.0), value: animate)
@@ -868,7 +1103,7 @@ struct DonutSlice: View {
         Path { path in
             let center = CGPoint(x: 60, y: 60)
             let radius: CGFloat = 50
-            let endAngle = startAngle + (animate ? percentage * 360 : 0)
+            let endAngle = startAngle + (animate ? percentage * 360 : 0.1 * 360)
             
             path.move(to: center)
             path.addArc(
@@ -911,6 +1146,7 @@ struct GamePage: View {
     @State private var animateCredits = false
     @State private var animatePowerUps = false
     @State private var animateStartButton = false
+    @State private var showingRanksInfo = false
 
     var body: some View {
         NavigationView {
@@ -950,7 +1186,21 @@ struct GamePage: View {
                                 Text("Score: \(gameCoordinator.score)")
                                     .font(.system(size: 20, weight: .semibold, design: .default))
                                     .foregroundColor(.white)
-                                Button(action: { isPlaying = false }) {
+                                
+                                // Show rank achieved
+                                let achievedRank = GameRank.fromScore(gameCoordinator.score)
+                                HStack(spacing: 12) {
+                                    Image(systemName: achievedRank.medalIcon)
+                                        .font(.system(size: 24, weight: .bold, design: .default))
+                                        .foregroundColor(achievedRank.medalColor)
+                                    Text("\(achievedRank.rawValue) Rank!")
+                                        .font(.system(size: 18, weight: .semibold, design: .default))
+                                        .foregroundColor(achievedRank.medalColor)
+                                }
+                                
+                                Button(action: { 
+                                    isPlaying = false 
+                                }) {
                                     Text("Back to Menu")
                                         .font(.system(size: 16, weight: .medium, design: .default))
                                         .foregroundColor(.gray)
@@ -960,14 +1210,19 @@ struct GamePage: View {
                             .background(Color.black.opacity(0.85))
                             .cornerRadius(20)
                             .padding(.horizontal, 40)
+                            .onAppear {
+                                // Update best score immediately when game over screen appears
+                                updatePlayerBestScore(gameCoordinator.score)
+                            }
                         }
                     }
                 } else {
                     // Start menu
-                    VStack(spacing: 32) {
-                        envolHeader(title: "Eco Run")
-                            .opacity(animateHeader ? 1 : 0)
-                            .offset(y: animateHeader ? 0 : -20)
+                    ScrollView {
+                        VStack(spacing: 32) {
+                            envolHeader(title: "Eco Run")
+                                .opacity(animateHeader ? 1 : 0)
+                                .offset(y: animateHeader ? 0 : -20)
                         
                         // Credits and cost box
                         VStack(spacing: 12) {
@@ -1067,14 +1322,21 @@ struct GamePage: View {
                             }
                             .disabled(creditsManager.credits < selectedPowerUp.cost)
                             .padding(.horizontal)
+                            
+                            // Player's Best Rank
+                            playerBestRankView
+                                .opacity(animateStartButton ? 1 : 0)
+                                .offset(y: animateStartButton ? 0 : 30)
+                                .animation(.easeOut(duration: 0.8).delay(1.0), value: animateStartButton)
                         }
                         .opacity(animateStartButton ? 1 : 0)
                         .offset(y: animateStartButton ? 0 : 30)
                         
-                        Spacer()
+                        Spacer(minLength: 20)
                     }
                     .padding()
                     .background(Color.clear)
+                    }
                     .navigationTitle("")
                     .navigationBarTitleDisplayMode(.inline)
                     .onAppear {
@@ -1110,6 +1372,12 @@ struct GamePage: View {
             }
         }
         .background(Color.clear)
+        .onChange(of: isPlaying) { _ in
+            checkGameEnd()
+        }
+        .sheet(isPresented: $showingRanksInfo) {
+            ranksInfoView
+        }
     }
 
     func startGame() {
@@ -1133,6 +1401,14 @@ struct GamePage: View {
             isPlaying = true
         } else {
             showingInsufficientCredits = true
+        }
+    }
+    
+    // Monitor game state changes to update best score
+    private func checkGameEnd() {
+        if !isPlaying && gameCoordinator.score > 0 {
+            // Game has ended, update best score
+            updatePlayerBestScore(gameCoordinator.score)
         }
     }
 
@@ -1197,6 +1473,209 @@ struct GamePage: View {
                     .fill(index < remainingHits ? Color.cyan : Color.gray)
                     .frame(width: 8, height: 8)
             }
+        }
+    }
+    
+    private var playerBestRankView: some View {
+        VStack(spacing: 12) {
+            Text("Your Best Rank")
+                .font(.system(size: 16, weight: .semibold, design: .default))
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 16) {
+                // Medal
+                let bestRank = GameRank(rawValue: creditsManager.bestRank) ?? .bronze
+                ZStack {
+                    Circle()
+                        .fill(bestRank.medalColor)
+                        .frame(width: 60, height: 60)
+                    
+                    Image(systemName: bestRank.medalIcon)
+                        .font(.system(size: 28, weight: .bold, design: .default))
+                        .foregroundColor(.white)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(bestRank.rawValue)
+                        .font(.system(size: 20, weight: .bold, design: .default))
+                        .foregroundColor(bestRank.medalColor)
+                    
+                    Text("Best Score: \(creditsManager.bestScore)")
+                        .font(.system(size: 14, weight: .medium, design: .default))
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // Info icon
+                Image(systemName: "info.circle")
+                    .font(.system(size: 20, weight: .medium, design: .default))
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6).opacity(0.8))
+        .cornerRadius(16)
+        .padding(.horizontal)
+        .onTapGesture {
+            showingRanksInfo = true
+        }
+    }
+    
+
+    
+    // Function to update player's best score and rank
+    func updatePlayerBestScore(_ newScore: Int) {
+        let newRank = GameRank.fromScore(newScore)
+        creditsManager.updateBestScore(newScore, rank: newRank.rawValue)
+    }
+    
+    private var ranksInfoView: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Rank System")
+                    .font(.system(size: 28, weight: .bold, design: .default))
+                    .foregroundColor(.primary)
+                
+                Text("Progress through ranks by achieving higher scores!")
+                    .font(.system(size: 16, weight: .medium, design: .default))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(GameRank.allCases, id: \.self) { rank in
+                            HStack(spacing: 16) {
+                                // Medal
+                                ZStack {
+                                    Circle()
+                                        .fill(rank.medalColor)
+                                        .frame(width: 50, height: 50)
+                                    
+                                    Image(systemName: rank.medalIcon)
+                                        .font(.system(size: 24, weight: .bold, design: .default))
+                                        .foregroundColor(.white)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(rank.rawValue)
+                                        .font(.system(size: 18, weight: .bold, design: .default))
+                                        .foregroundColor(rank.medalColor)
+                                    
+                                    Text(scoreRangeText(for: rank))
+                                        .font(.system(size: 14, weight: .medium, design: .default))
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                // Current rank indicator
+                                if rank.rawValue == creditsManager.bestRank {
+                                    Text("CURRENT")
+                                        .font(.system(size: 12, weight: .bold, design: .default))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(rank.medalColor)
+                                        .cornerRadius(8)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.systemGray6).opacity(0.8))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        showingRanksInfo = false
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+        }
+    }
+    
+    private func scoreRangeText(for rank: GameRank) -> String {
+        switch rank {
+        case .bronze:
+            return "0 - 499 points"
+        case .silver:
+            return "500 - 749 points"
+        case .gold:
+            return "750 - 999 points"
+        case .platinum:
+            return "1000 - 1299 points"
+        case .diamond:
+            return "1300 - 1599 points"
+        case .champion:
+            return "1600+ points"
+        }
+    }
+}
+
+enum GameRank: String, CaseIterable {
+    case bronze = "Bronze"
+    case silver = "Silver"
+    case gold = "Gold"
+    case platinum = "Platinum"
+    case diamond = "Diamond"
+    case champion = "Champion"
+    
+    static func fromScore(_ score: Int) -> GameRank {
+        if score >= 1600 {
+            return .champion
+        } else if score >= 1300 {
+            return .diamond
+        } else if score >= 1000 {
+            return .platinum
+        } else if score >= 750 {
+            return .gold
+        } else if score >= 500 {
+            return .silver
+        } else {
+            return .bronze
+        }
+    }
+    
+    var medalIcon: String {
+        switch self {
+        case .bronze: return "medal"
+        case .silver: return "medal.fill"
+        case .gold: return "crown.fill"
+        case .platinum: return "crown"
+        case .diamond: return "diamond.fill"
+        case .champion: return "star.fill"
+        }
+    }
+    
+    var medalColor: Color {
+        switch self {
+        case .bronze: return .orange
+        case .silver: return .gray
+        case .gold: return .yellow
+        case .platinum: return .blue
+        case .diamond: return .purple
+        case .champion: return .red
+        }
+    }
+    
+    var emoji: String {
+        switch self {
+        case .bronze: return "🥉"
+        case .silver: return "🥈"
+        case .gold: return "🥇"
+        case .platinum: return "💎"
+        case .diamond: return "💠"
+        case .champion: return "🏆"
         }
     }
 }
@@ -1345,7 +1824,7 @@ struct StarryBackground: View {
 @ViewBuilder
 private func envolHeader(title: String) -> some View {
     HStack(spacing: 6) {
-        Text("envol")
+        Text("envolv")
             .font(.system(size: 18, weight: .bold, design: .default))
         Image(systemName: "leaf.fill")
             .foregroundColor(.green)
@@ -1353,6 +1832,83 @@ private func envolHeader(title: String) -> some View {
             .font(.system(size: 18, weight: .semibold, design: .default))
     }
     .padding(.bottom, 4)
+}
+
+
+
+struct SignOutTabView: View {
+    @EnvironmentObject var authManager: AuthManager
+    @EnvironmentObject var creditsManager: CreditsManager
+    @Binding var selectedTab: Int
+    
+    var body: some View {
+        Color.clear
+            .onAppear {
+                // Trigger sign out when this tab is selected
+                // Clear user data first
+                creditsManager.setUser(email: "")
+                // Then logout
+                authManager.logout()
+                // Reset to home tab after a brief delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    selectedTab = 0
+                }
+            }
+    }
+}
+
+// Helper function to find the tab bar
+func findTabBar() -> UITabBar? {
+    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+          let window = windowScene.windows.first else {
+        return nil
+    }
+    
+    func findTabBar(in view: UIView) -> UITabBar? {
+        if let tabBar = view as? UITabBar {
+            return tabBar
+        }
+        
+        for subview in view.subviews {
+            if let tabBar = findTabBar(in: subview) {
+                return tabBar
+            }
+        }
+        
+        return nil
+    }
+    
+    return findTabBar(in: window)
+}
+
+// Function to continuously monitor and maintain tab bar colors
+func startTabBarColorMonitoring() {
+    // Initial setup
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        applySignOutTabColor()
+    }
+    
+    // Set up a timer to continuously check and apply the color
+    Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+        DispatchQueue.main.async {
+            applySignOutTabColor()
+        }
+    }
+}
+
+// Function to apply red color to sign out tab
+func applySignOutTabColor() {
+    if let tabBar = findTabBar() {
+        if let items = tabBar.items, items.count > 3 {
+            // Set both normal and selected states to red for sign out tab
+            items[3].setTitleTextAttributes([.foregroundColor: UIColor.systemRed], for: .normal)
+            items[3].setTitleTextAttributes([.foregroundColor: UIColor.systemRed], for: .selected)
+            
+            // Also set the icon color to red
+            items[3].image = items[3].image?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
+            items[3].selectedImage = items[3].selectedImage?.withTintColor(.systemRed, renderingMode: .alwaysOriginal)
+        }
+    }
 }
 
 #Preview {

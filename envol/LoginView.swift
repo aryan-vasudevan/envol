@@ -28,7 +28,7 @@ struct LoginView: View {
                         // App name
                         VStack(spacing: 8) {
                             HStack(spacing: 8) {
-                                Text("envol")
+                                Text("envolv")
                                     .font(.system(size: 36, weight: .bold, design: .default))
                                     .foregroundColor(.white)
                                 Image(systemName: "leaf.fill")
